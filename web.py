@@ -1,30 +1,33 @@
 # -*- coding: utf-8 -*-
 """
-啟動方式（本機）：
+本機：
   pip install flask yfinance
   python portfolio.py
-本機開啟：
-  http://127.0.0.1:5000/          （投資組合）
-雲端（Render）：
-  Start Command = gunicorn portfolio:app --bind 0.0.0.0:$PORT --access-logfile - --error-logfile - --timeout 120 --forwarded-allow-ips='*'
+開啟：http://127.0.0.1:5000/
+
+Render（建議 Start Command）：
+  gunicorn portfolio:app --bind 0.0.0.0:$PORT --access-logfile - --error-logfile - --timeout 120 --forwarded-allow-ips='*'
 """
 
 from flask import Flask, render_template_string, request
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 from werkzeug.middleware.proxy_fix import ProxyFix
-import pandas as pd
 import yfinance as yf
-import time, threading, os
+import pandas as pd
+import threading, time, os, logging
 
 app = Flask(__name__)
-# 代理相容（Render / 反向代理下正確判斷 https/host）
+# 代理相容（雲端反向代理下正確判斷 https/host）
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
+# 降噪：隱藏 yfinance 的「possibly delisted」等訊息
+logging.getLogger("yfinance").setLevel(logging.ERROR)
+
 # ============== 使用者設定 ==============
-# 在「自選股績效」中要排除的美股 ETF（用於 hide_etf）
+# 在「自選股績效」中要排除的美股 ETF（用於 hide_etf 與摘要）
 EXCLUDED_ETFS_US = {'SGOV', 'VOO', 'VEA', 'TLT', 'BOXX', 'GLD', 'VT', 'EWT', 'XLU'}
 
-# 你的持倉（可自行調整）
+# 你的持倉（可自行調整；你剛剛已移除 00687B.TW，我這裡也不放）
 US_PORTFOLIO = [
     {'symbol': 'SGOV',  'shares': 1200,  'cost': 100.40},
     {'symbol': 'VOO',   'shares': 70.00, 'cost': 506.75},
@@ -57,25 +60,26 @@ TW_PORTFOLIO = [
     {'symbol': '0050.TW',   'shares': 10637, 'cost': 41.58},
     {'symbol': '006208.TW', 'shares': 9000,  'cost': 112.67},
     {'symbol': '00713.TW',  'shares': 10427, 'cost': 54.40},
-    # {'symbol': '00687B.TW', 'shares': 25000, 'cost': 31.59},
+    # {'symbol': '00687B.TW', 'shares': 25000, 'cost': 31.59},  # 你已移除
 ]
 
 # ============== 輕量 TTL 快取 ==============
-_TTL_FAST   = 60        # 1 分鐘：即時/當日
-_TTL_NORMAL = 300       # 5 分鐘：一般查詢
+_TTL_FAST   = 60        # 1 分鐘：即時／當日
+_TTL_NORMAL = 300       # 5 分鐘：一般
 _TTL_LONG   = 3600      # 1 小時：較長週期
+
 _cache = {}
 _cache_lock = threading.Lock()
 def _now(): return time.time()
-def _get_cache(key): 
+def _get_cache(key):
     with _cache_lock:
         return _cache.get(key)
-def _set_cache(key, value): 
+def _set_cache(key, value):
     with _cache_lock:
         _cache[key] = value
 
 def cached_history(symbol, *, period=None, start=None, end=None, ttl=_TTL_NORMAL):
-    """以 TTL 記憶 yfinance history；抓失敗時回上次成功的舊值。"""
+    """以 TTL 記憶 yfinance history；抓失敗時回上次成功的舊值（stale）。"""
     key = ("history", symbol, period, start, end)
     entry = _get_cache(key)
     now = _now()
@@ -92,32 +96,40 @@ def cached_history(symbol, *, period=None, start=None, end=None, ttl=_TTL_NORMAL
         return pd.DataFrame()
 
 def cached_close(symbol, ttl=_TTL_FAST):
-    """回傳該標的最新收盤價（history('1d') 的最後一筆），使用 TTL 快取。"""
-    df = cached_history(symbol, period="1d", ttl=ttl)
-    if not df.empty:
-        return float(df["Close"].iloc[-1])
+    """
+    取最近一筆有效收盤價：先試 7d，再退 1mo；各自帶 TTL。
+    避免假日／停牌導致 period='1d' 為空而報「possibly delisted」。
+    """
+    for period, t in (("7d", ttl), ("1mo", max(ttl, _TTL_NORMAL))):
+        df = cached_history(symbol, period=period, ttl=t)
+        if not df.empty and "Close" in df:
+            close = df["Close"].dropna()
+            if not close.empty:
+                return float(close.iloc[-1])
     return 'N/A'
 
-# 台股價格：嘗試多種代碼格式
 def get_tw_stock_price(symbol):
-    candidates = [
-        symbol,
-        symbol.replace('.TW', ''),
-        symbol.replace('.TW', '.TWO'),
-        symbol.replace('.TW', '.TW:US'),
-    ]
+    """
+    台股 ETF/股票的強韌代碼嘗試：.TW → .TWO → 裸代碼 → .TPE
+    取最近有效收盤價（搭配 cached_close）。
+    """
+    base = symbol.replace(".TW", "")
+    candidates = [f"{base}.TW", f"{base}.TWO", base, f"{base}.TPE"]
+    seen = set()
     for sym in candidates:
+        if sym in seen: 
+            continue
+        seen.add(sym)
         price = cached_close(sym, ttl=_TTL_FAST)
         if price != 'N/A':
             return price
     return 'N/A'
 
-# 匯率（USD/TWD）
 def get_usdtwd_rate(default=31.5):
     px = cached_close('USDTWD=X', ttl=_TTL_FAST)
     return px if px != 'N/A' else default
 
-# ============== 頁面：投資組合 ==============
+# ============== 模板（投資組合） ==============
 TEMPLATE = r"""
 <html>
 <head>
@@ -128,7 +140,7 @@ TEMPLATE = r"""
         .container { max-width: 1200px; margin: 32px auto; background: #fff; padding: 28px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.06); }
         h1 { margin: 0 0 8px; color: #2c3e50; }
         .meta { color: #6c757d; margin-bottom: 16px; }
-        .bar { display:flex; justify-content: space-between; align-items:center; margin: 10px 0 18px; }
+        .bar { display:flex; justify-content: space-between; align-items:center; margin: 10px 0 18px; gap: 8px; flex-wrap: wrap; }
         .pill { background:#e3f2fd; color:#1976d2; padding:8px 12px; border-radius:999px; font-weight:600; }
         .summary { background:#f8f9fa; padding:18px; border-radius:10px; margin:18px 0; }
         .summary-row { display:flex; justify-content:space-between; margin:6px 0; }
@@ -204,18 +216,37 @@ TEMPLATE = r"""
     </table>
 
     <div class="summary">
+        <h3>美股總結（全部持倉）</h3>
         <div class="summary-row">
-            <span>美股總市值（全部持倉）：</span>
+            <span>美股總市值：</span>
             <span class="right"><b>{{ '%.2f' % us_total_market_value }}</b> USD（{{ '%.0f' % (us_total_market_value * exchange_rate) }} TWD）</span>
         </div>
         <div class="summary-row">
-            <span>美股總成本（全部持倉）：</span>
+            <span>美股總成本：</span>
             <span class="right"><b>{{ '%.2f' % us_total_cost }}</b> USD（{{ '%.0f' % (us_total_cost * exchange_rate) }} TWD）</span>
         </div>
         <div class="summary-row">
-            <span>美股總報酬（全部持倉）：</span>
+            <span>美股總報酬：</span>
             <span class="right {% if us_total_profit_pct > 0 %}gain{% elif us_total_profit_pct < 0 %}loss{% endif %}">
                 <b>{{ '%.2f' % us_total_profit }}</b> USD（{{ '%.0f' % (us_total_profit * exchange_rate) }} TWD，{{ '%.2f' % us_total_profit_pct }}%）
+            </span>
+        </div>
+    </div>
+
+    <div class="summary">
+        <h3>美股自選股績效（已扣除 {{ excluded_join }}）</h3>
+        <div class="summary-row">
+            <span>自選股總市值：</span>
+            <span class="right"><b>{{ '%.2f' % us_core_total_market_value }}</b> USD（{{ '%.0f' % (us_core_total_market_value * exchange_rate) }} TWD）</span>
+        </div>
+        <div class="summary-row">
+            <span>自選股總成本：</span>
+            <span class="right"><b>{{ '%.2f' % us_core_total_cost }}</b> USD（{{ '%.0f' % (us_core_total_cost * exchange_rate) }} TWD）</span>
+        </div>
+        <div class="summary-row">
+            <span>自選股總報酬：</span>
+            <span class="right {% if us_core_total_profit_pct > 0 %}gain{% elif us_core_total_profit_pct < 0 %}loss{% endif %}">
+                <b>{{ '%.2f' % us_core_total_profit }}</b> USD（{{ '%.0f' % (us_core_total_profit * exchange_rate) }} TWD，{{ '%.2f' % us_core_total_profit_pct }}%）
             </span>
         </div>
     </div>
@@ -265,11 +296,10 @@ TEMPLATE = r"""
 </html>
 """
 
+# ============== 路由 ==============
 @app.route("/")
 def home():
     updated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
-
-    # 匯率
     exchange_rate = get_usdtwd_rate(default=31.5)
 
     # ---- 美股資料
@@ -311,9 +341,16 @@ def home():
     us_total_profit = sum(it["profit"] for it in us_items)
     us_total_profit_pct = (us_total_profit / us_total_cost * 100) if us_total_cost else 0.0
 
+    # ===== 美股「自選股」摘要（排除 ETF）=====
+    us_core_items = [it for it in us_items if it["symbol"] not in EXCLUDED_ETFS_US]
+    us_core_total_market_value = sum(it["market_value"] for it in us_core_items)
+    us_core_total_cost = sum((it["cost"] * it["shares"]) for it in us_core_items)
+    us_core_total_profit = sum(it["profit"] for it in us_core_items)
+    us_core_total_profit_pct = (us_core_total_profit / us_core_total_cost * 100) if us_core_total_cost else 0.0
+
     # 切換：隱藏 ETF（影響表格與佔比分母）
     hide_etf = request.args.get('hide_etf') in ('1', 'true', 'on', 'yes')
-    us_table = [it for it in us_items if (it["symbol"] not in EXCLUDED_ETFS_US)] if hide_etf else us_items
+    us_table = us_core_items if hide_etf else us_items
     us_denominator = sum(it["market_value"] for it in us_table) if hide_etf else us_total_market_value
     for it in us_table:
         it["weight_str"] = (f"{(it['market_value'] / us_denominator * 100):.2f}%"
@@ -382,6 +419,12 @@ def home():
         us_total_cost=us_total_cost,
         us_total_profit=us_total_profit,
         us_total_profit_pct=us_total_profit_pct,
+
+        # 自選股摘要
+        us_core_total_market_value=us_core_total_market_value,
+        us_core_total_cost=us_core_total_cost,
+        us_core_total_profit=us_core_total_profit,
+        us_core_total_profit_pct=us_core_total_profit_pct,
 
         tw_table=tw_items,
         tw_total_market_value=tw_total_market_value,
