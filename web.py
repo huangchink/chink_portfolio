@@ -57,7 +57,7 @@ TW_PORTFOLIO = [
     {'symbol': '0050.TW',   'shares': 10637, 'cost': 41.58},
     {'symbol': '006208.TW', 'shares': 9000,  'cost': 112.67},
     {'symbol': '00713.TW',  'shares': 10427, 'cost': 54.40},
-    {'symbol': '00687B.TW', 'shares': 25000, 'cost': 31.59},
+    # {'symbol': '00687B.TW', 'shares': 25000, 'cost': 31.59},
 ]
 
 # ============== 輕量 TTL 快取 ==============
