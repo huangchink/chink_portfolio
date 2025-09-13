@@ -8,12 +8,14 @@
   http://127.0.0.1:5000/portfolio （投資組合 + 自選股績效摘要）
 """
 
+
 from flask import Flask, render_template_string, request
 import yfinance as yf
 from datetime import datetime, timedelta, date
 
 app = Flask(__name__)
-
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 # ===== 你要在「自選股績效」中排除的美股 ETF（可自行調整） =====
 EXCLUDED_ETFS_US = {'SGOV', 'VOO', 'VEA', 'TLT','BOXX','MSTR','VT','GLD','XLU','EWT'}
 
@@ -161,7 +163,12 @@ def index():
     html = '''
     <html>
     <head>
-        <title>ETF介紹</title>
+        <div style="display:flex; gap:16px; margin-bottom:16px;">
+
+        <a href="/">ETF介紹</a>
+        <a href="/portfolio">投資組合</a>
+        </div>
+        
         <meta charset="utf-8">
         <style>
             body { font-family: "微軟正黑體", Arial, sans-serif; background: #f8f9fa; }
