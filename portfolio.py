@@ -62,14 +62,14 @@ FULL_PORTFOLIO = [
     {'symbol': 'YUM',   'shares': 1,     'cost': 141.34},
 
     {'symbol': 'GIS',   'shares': 2,     'cost': 49.695},
-    {'symbol': 'IDMO',   'shares': 60,     'cost': 53.48},
+    # {'symbol': 'IDMO',   'shares': 60,     'cost': 53.48},
 
 
 
     {'symbol': 'TSLA',   'shares': 1.473,     'cost': 423.885},
 
 
-    {'symbol': 'AVDV',   'shares': 40,     'cost':87.945},
+    # {'symbol': 'AVDV',   'shares': 40,     'cost':87.945},
 
 ]
 
