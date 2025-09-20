@@ -48,7 +48,7 @@ US_PORTFOLIO = [
     {'symbol': 'MCD',   'shares': 10,    'cost': 299.23},
     {'symbol': 'CEG',   'shares': 1,     'cost': 314.69},
     {'symbol': 'LEU',   'shares': 1,     'cost': 214.64},
-    {'symbol': 'PYPL',  'shares': 26,    'cost': 69.41},
+    {'symbol': 'PYPL',  'shares': 50,    'cost':  69.265},
     {'symbol': 'TSM',   'shares': 2,     'cost': 227.80},
     {'symbol': 'EWT',   'shares': 100,   'cost': 61.27},
     {'symbol': 'SNPS',  'shares': 4,     'cost': 397.15},
