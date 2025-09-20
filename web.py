@@ -34,7 +34,7 @@ US_PORTFOLIO = [
     {'symbol': 'VOO',   'shares': 70.00, 'cost': 506.75},
     {'symbol': 'VEA',   'shares': 86.80, 'cost': 53.55},
     {'symbol': 'GLD',   'shares': 16.55, 'cost': 300.10},
-    {'symbol': 'TLT',   'shares': 224.7, 'cost': 92.22},
+    {'symbol': 'TLT',   'shares': 193, 'cost': 91.815},
     {'symbol': 'BOXX',  'shares': 100,   'cost': 110.71},
     {'symbol': 'UNH',   'shares': 22,    'cost': 310.86},
     {'symbol': 'GOOGL', 'shares': 72,    'cost': 174.71},
