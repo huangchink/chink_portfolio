@@ -29,7 +29,7 @@ EXCLUDED_ETFS_US = {'SGOV', 'VOO', 'VEA', 'TLT', 'BOXX', 'GLD', 'VT', 'EWT', 'XL
 
 # 你的持倉（可自行調整；你剛剛已移除 00687B.TW，我這裡也不放）
 US_PORTFOLIO = [
-    {'symbol': 'SGOV',  'shares': 1200,  'cost': 100.40},
+    {'symbol': 'SGOV',  'shares': 1100,  'cost': 100.40},
     {'symbol': 'VOO',   'shares': 70.00, 'cost': 506.75},
     {'symbol': 'VEA',   'shares': 86.80, 'cost': 53.55},
     {'symbol': 'GLD',   'shares': 16.55, 'cost': 300.10},
