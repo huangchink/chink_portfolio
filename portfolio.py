@@ -32,7 +32,7 @@ EXCLUDED_ETFS_US = {'SGOV', 'VOO', 'VEA', 'TLT', 'BOXX', 'GLD', 'VT', 'EWT', 'XL
 
 FULL_PORTFOLIO = [
     # ETF（會被排除）
-    {'symbol': 'SGOV',  'shares': 1200,  'cost': 100.40},
+    {'symbol': 'SGOV',  'shares': 1100,  'cost': 100.40},
     {'symbol': 'VOO',   'shares': 70.00, 'cost': 506.75},
     {'symbol': 'VEA',   'shares': 86.80, 'cost': 53.55},
     {'symbol': 'GLD',   'shares': 16.55, 'cost': 300.10},
@@ -59,7 +59,21 @@ FULL_PORTFOLIO = [
     {'symbol': 'TSM',   'shares': 2,     'cost': 227.80},
     {'symbol': 'SNPS',  'shares': 4,     'cost': 397.15},
     {'symbol': 'YUM',   'shares': 1,     'cost': 141.34},
+
+    {'symbol': 'GIS',   'shares': 2,     'cost': 49.695},
+    {'symbol': 'IDMO',   'shares': 60,     'cost': 53.48},
+
+
+
+    {'symbol': 'TSLA',   'shares': 1.473,     'cost': 423.885},
+
+
+    {'symbol': 'AVDV',   'shares': 40,     'cost':87.945},
+
 ]
+
+
+
 
 # ================== 輕量 TTL 快取 ==================
 _TTL_FAST   = 60        # 1 分鐘：即時/當日
