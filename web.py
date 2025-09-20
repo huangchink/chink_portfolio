@@ -54,6 +54,17 @@ US_PORTFOLIO = [
     {'symbol': 'YUM',   'shares': 1,     'cost': 141.34},
     {'symbol': 'XLU',   'shares': 87.71, 'cost': 83.80},
     {'symbol': 'VT',    'shares': 50,    'cost': 133.69},
+    {'symbol': 'GIS',   'shares': 2,     'cost': 49.695},
+    {'symbol': 'IDMO',   'shares': 60,     'cost': 53.48},
+
+
+
+    {'symbol': 'TSLA',   'shares': 1.473,     'cost': 423.885},
+
+
+    {'symbol': 'AVDV',   'shares': 40,     'cost':87.945},
+
+
 ]
 
 TW_PORTFOLIO = [

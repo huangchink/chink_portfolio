@@ -15,6 +15,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import yfinance as yf
 import pandas as pd
 import threading, time, os, logging
+from pytz import timezone
 
 app = Flask(__name__)
 # 代理相容（在 Render 這類代理後正確判定 https/host）
@@ -55,7 +56,7 @@ FULL_PORTFOLIO = [
     {'symbol': 'MCD',   'shares': 10,    'cost': 299.23},
     {'symbol': 'CEG',   'shares': 1,     'cost': 314.69},
     {'symbol': 'LEU',   'shares': 1,     'cost': 214.64},
-    {'symbol': 'PYPL',  'shares': 26,    'cost': 69.41},
+    {'symbol': 'PYPL',  'shares': 50,    'cost': 69.265},
     {'symbol': 'TSM',   'shares': 2,     'cost': 227.80},
     {'symbol': 'SNPS',  'shares': 4,     'cost': 397.15},
     {'symbol': 'YUM',   'shares': 1,     'cost': 141.34},
@@ -143,7 +144,7 @@ TEMPLATE = r"""
 <body>
 <div class="container">
     <h1>Chink's 自選股績效</h1>
-    <div class="meta">更新時間：{{ updated_at }}（UTC）</div>
+    <div class="meta">更新時間：{{ updated_at_tw }}（台灣） / {{ updated_at }}（UTC）</div>
 
     <div class="summary">
         <div class="summary-row">
