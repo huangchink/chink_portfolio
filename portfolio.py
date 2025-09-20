@@ -144,7 +144,7 @@ TEMPLATE = r"""
 <body>
 <div class="container">
     <h1>Chink's 自選股績效</h1>
-    <div class="meta">更新時間：{{ updated_at_tw }}（台灣） / {{ updated_at }}（UTC）</div>
+    <div class="meta">更新時間：{{ updated_at_tw }}（台灣） </div>
 
     <div class="summary">
         <div class="summary-row">
@@ -191,7 +191,7 @@ TEMPLATE = r"""
 # ================== 路由 ==================
 @app.route("/")
 def watchlist_only():
-    updated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    updated_at_tw = datetime.now(timezone('Asia/Taipei')).strftime("%Y-%m-%d %H:%M")
 
     # 濾出自選股（排 ETF）
     core_rows = [r for r in FULL_PORTFOLIO if r['symbol'] not in EXCLUDED_ETFS_US]
@@ -240,7 +240,8 @@ def watchlist_only():
 
     return render_template_string(
         TEMPLATE,
-        updated_at=updated_at,
+        updated_at_tw=updated_at_tw,
+
         core_items=core_items,
         core_total_mv=core_total_mv,
         core_total_cost=core_total_cost,

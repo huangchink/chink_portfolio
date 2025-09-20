@@ -15,6 +15,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import yfinance as yf
 import pandas as pd
 import threading, time, os, logging
+from pytz import timezone
 
 app = Flask(__name__)
 # 代理相容（雲端反向代理下正確判斷 https/host）
@@ -310,7 +311,7 @@ TEMPLATE = r"""
 # ============== 路由 ==============
 @app.route("/")
 def home():
-    updated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    updated_at_tw = datetime.now(timezone('Asia/Taipei')).strftime("%Y-%m-%d %H:%M")
     exchange_rate = get_usdtwd_rate(default=31.5)
 
     # ---- 美股資料
@@ -420,7 +421,7 @@ def home():
 
     return render_template_string(
         TEMPLATE,
-        updated_at=updated_at,
+        updated_at=updated_at_tw,
         exchange_rate=exchange_rate,
         hide_etf=hide_etf,
         excluded_join="、".join(sorted(EXCLUDED_ETFS_US)),
