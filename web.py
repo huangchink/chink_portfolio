@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 """
 本機：
@@ -10,7 +11,7 @@ Render（建議 Start Command）：
 """
 
 from flask import Flask, render_template_string, request
-from datetime import datetime, date
+from datetime import datetime
 from werkzeug.middleware.proxy_fix import ProxyFix
 import yfinance as yf
 import pandas as pd
@@ -26,16 +27,14 @@ logging.getLogger("yfinance").setLevel(logging.ERROR)
 
 # ============== 使用者設定 ==============
 # 在「自選股績效」中要排除的美股 ETF（用於 hide_etf 與摘要）
-EXCLUDED_ETFS_US = {'SGOV', 'VOO', 'VEA', 'TLT', 'BOXX', 'GLD', 'VT', 'EWT', 'XLU'}
+# SGOV, BOXX, TLT 已移至債券部位，故從此處移除
+EXCLUDED_ETFS_US = {'VOO', 'VEA', 'GLD', 'VT', 'EWT', 'XLU'}
 
-# 你的持倉（可自行調整；你剛剛已移除 00687B.TW，我這裡也不放）
+# 你的持倉（可自行調整）
 US_PORTFOLIO = [
-    {'symbol': 'SGOV',  'shares': 1100,  'cost': 100.40},
     {'symbol': 'VOO',   'shares': 70.00, 'cost': 506.75},
     {'symbol': 'VEA',   'shares': 86.80, 'cost': 53.55},
     {'symbol': 'GLD',   'shares': 16.55, 'cost': 300.10},
-    {'symbol': 'TLT',   'shares': 193, 'cost': 91.815},
-    {'symbol': 'BOXX',  'shares': 100,   'cost': 110.71},
     {'symbol': 'UNH',   'shares': 22,    'cost': 310.86},
     {'symbol': 'GOOGL', 'shares': 72,    'cost': 174.71},
     {'symbol': 'NVDA',  'shares': 32,    'cost': 120.92},
@@ -56,29 +55,49 @@ US_PORTFOLIO = [
     {'symbol': 'XLU',   'shares': 87.71, 'cost': 83.80},
     {'symbol': 'VT',    'shares': 50,    'cost': 133.69},
     {'symbol': 'GIS',   'shares': 2,     'cost': 49.695},
-    {'symbol': 'IDMO',   'shares': 60,     'cost': 53.48},
-
-
-
-    {'symbol': 'TSLA',   'shares': 1.473,     'cost': 423.885},
-
-
-    {'symbol': 'AVDV',   'shares': 40,     'cost':87.945},
-
-
+    {'symbol': 'IDMO',   'shares': 60,    'cost': 53.48},
+    {'symbol': 'TSLA',   'shares': 1.473,   'cost': 423.885},
+    {'symbol': 'AVDV',   'shares': 40,    'cost':87.945},
 ]
 
 TW_PORTFOLIO = [
     {'symbol': '0050.TW',   'shares': 10637, 'cost': 41.58},
     {'symbol': '006208.TW', 'shares': 9000,  'cost': 112.67},
     {'symbol': '00713.TW',  'shares': 10427, 'cost': 54.40},
-    # {'symbol': '00687B.TW', 'shares': 25000, 'cost': 31.59},  # 你已移除
 ]
 
+# 短債部位
+SHORT_TERM_BONDS = [
+    {'symbol': 'SGOV',  'shares': 1100,  'cost': 100.40},
+    {'symbol': 'BOXX',  'shares': 100,   'cost': 110.71},
+]
+
+# 長債部位
+LONG_TERM_BONDS = [
+    {'symbol': 'TLT',   'shares': 193, 'cost': 91.815},
+]
+
+# 現金部位
+CASH_HOLDINGS = [
+    {'currency': 'TWD', 'amount': 500000},
+    {'currency': 'AUD', 'amount': 6851.54},
+    {'currency': 'JPY', 'amount': 417356},
+    {'currency': 'USD', 'amount': 6314},
+]
+
+# 加密貨幣投資組合
+CRYPTO_PORTFOLIO = [
+    {'symbol': 'BTC', 'amount': 0.01, 'cost': 117520},
+    {'symbol': 'ETH', 'amount': 0.003, 'cost': 0.000000000001},
+    {'symbol': 'USDT', 'amount': 455.944, 'cost': 1.0},
+    {'symbol': 'USDC', 'amount': 1630, 'cost': 1.0}
+]
+
+
 # ============== 輕量 TTL 快取 ==============
-_TTL_FAST   = 60        # 1 分鐘：即時／當日
-_TTL_NORMAL = 300       # 5 分鐘：一般
-_TTL_LONG   = 3600      # 1 小時：較長週期
+_TTL_FAST   = 60      # 1 分鐘：即時／當日
+_TTL_NORMAL = 300     # 5 分鐘：一般
+_TTL_LONG   = 3600    # 1 小時：較長週期
 
 _cache = {}
 _cache_lock = threading.Lock()
@@ -137,9 +156,18 @@ def get_tw_stock_price(symbol):
             return price
     return 'N/A'
 
-def get_usdtwd_rate(default=31.5):
-    px = cached_close('USDTWD=X', ttl=_TTL_FAST)
-    return px if px != 'N/A' else default
+def get_crypto_price(symbol):
+    """取加密貨幣對 USD 的價格"""
+    return cached_close(f"{symbol}-USD", ttl=_TTL_FAST)
+
+def get_currency_rate(pair, default=1.0):
+    """取匯率，例如 'USDTWD=X'"""
+    # yfinance 對某些貨幣對用 '=X'，有些不用，此處做一個保險
+    for suffix in ['=X', '']:
+        price = cached_close(f"{pair}{suffix}", ttl=_TTL_LONG)
+        if price != 'N/A':
+            return price
+    return default
 
 # ============== 模板（投資組合） ==============
 TEMPLATE = r"""
@@ -147,23 +175,27 @@ TEMPLATE = r"""
 <head>
     <meta charset="utf-8">
     <title>Chink's Portfolio</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
     <style>
-        body { font-family: "微軟正黑體", Arial, sans-serif; background: #f4f6f8; }
+        body { font-family: "微軟正黑體", Arial, sans-serif; background: #f4f6f8; color: #333; }
         .container { max-width: 1200px; margin: 32px auto; background: #fff; padding: 28px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.06); }
-        h1 { margin: 0 0 8px; color: #2c3e50; }
+        h1, h2, h3 { margin: 0 0 8px; color: #2c3e50; }
+        h2 { margin-top: 28px; border-bottom: 2px solid #eaecef; padding-bottom: 8px;}
         .meta { color: #6c757d; margin-bottom: 16px; }
         .bar { display:flex; justify-content: space-between; align-items:center; margin: 10px 0 18px; gap: 8px; flex-wrap: wrap; }
         .pill { background:#e3f2fd; color:#1976d2; padding:8px 12px; border-radius:999px; font-weight:600; }
         .summary { background:#f8f9fa; padding:18px; border-radius:10px; margin:18px 0; }
-        .summary-row { display:flex; justify-content:space-between; margin:6px 0; }
+        .summary-row { display:flex; justify-content:space-between; margin:6px 0; font-size: 1.1em; }
+        .chart-container { max-width: 450px; margin: 24px auto; }
         table { width:100%; border-collapse: collapse; margin-top: 14px; }
         th, td { border: 1px solid #eaecef; padding: 10px 12px; text-align: left; }
-        th { background: #f0f3f6; }
+        th { background: #f0f3f6; font-weight: 600; }
         .right { text-align:right; }
-        .gain { color:#c62828; font-weight:700; }   /* 紅漲 */
-        .loss { color:#2e7d32; font-weight:700; }   /* 綠跌 */
+        .gain { color:#c62828; font-weight:700; } /* 紅漲 */
+        .loss { color:#2e7d32; font-weight:700; } /* 綠跌 */
         .nav { margin-bottom: 8px; }
-        .nav a { margin-right: 14px; text-decoration:none; color:#1976d2; }
+        .nav a { margin-right: 14px; text-decoration:none; color:#1976d2; font-weight: 500;}
     </style>
 </head>
 <body>
@@ -174,281 +206,424 @@ TEMPLATE = r"""
     </div>
 
     <h1>Chink's Portfolio</h1>
-    <div class="meta">更新時間：{{ updated_at }}（UTC）</div>
+    <div class="meta">更新時間：{{ updated_at }}</div>
+    <div class="meta">美金兌台幣匯率：<b>{{ '%.3f' % exchange_rate }}</b></div>
 
-    <div class="bar">
-        <div class="pill">美金兌台幣匯率：{{ '%.2f' % exchange_rate }} TWD / USD</div>
+    <div class="summary">
+        <div class="summary-row">
+            <span>總資產市值 (TWD)：</span>
+            <span class="right"><b>{{ '%.0f' % grand_total_market_value_twd }}</b></span>
+        </div>
+        <div class="summary-row">
+            <span>總投入成本 (TWD)：</span>
+            <span class="right"><b>{{ '%.0f' % grand_total_cost_twd }}</b></span>
+        </div>
+        <div class="summary-row">
+            <span>總報酬 (TWD)：</span>
+            <span class="right {% if grand_total_profit_twd > 0 %}gain{% elif grand_total_profit_twd < 0 %}loss{% endif %}">
+                <b>{{ '%.0f' % grand_total_profit_twd }}</b> ({{ '%.2f' % grand_total_profit_pct }}%)
+            </span>
+        </div>
+    </div>
+    
+    <div class="chart-container">
+        <canvas id="assetAllocationChart"></canvas>
+    </div>
+
+    <h2>美股投資組合 (USD)</h2>
+     <div class="bar">
+        <div></div>
         <form method="get" id="filterForm">
             <label>
                 <input type="checkbox" name="hide_etf" value="1" {% if hide_etf %}checked{% endif %} onchange="document.getElementById('filterForm').submit()">
-                隱藏 ETF（{{ excluded_join }}）
+                隱藏 ETF ({{ excluded_join }})
             </label>
         </form>
     </div>
-
-    <div class="summary">
-        <div class="summary-row">
-            <span>總市值（折台幣）：</span>
-            <span class="right"><b>{{ '%.0f' % total_market_value_twd }}</b> TWD</span>
-        </div>
-        <div class="summary-row">
-            <span>總成本（折台幣）：</span>
-            <span class="right"><b>{{ '%.0f' % total_cost_twd }}</b> TWD</span>
-        </div>
-        <div class="summary-row">
-            <span>總報酬（折台幣）：</span>
-            <span class="right {% if total_profit_pct > 0 %}gain{% elif total_profit_pct < 0 %}loss{% endif %}">
-                <b>{{ '%.0f' % total_profit_twd }}</b> TWD（{{ '%.2f' % total_profit_pct }}%）
-            </span>
-        </div>
-    </div>
-
-    <h2>美股投資組合（USD）</h2>
     <table>
         <tr>
-            <th>代碼</th>
-            <th class="right">現價</th>
-            <th class="right">成本價</th>
-            <th class="right">持有股數</th>
-            <th class="right">市值</th>
-            <th class="right">佔比（依目前顯示）</th>
-            <th class="right">個別報酬率</th>
+            <th>代碼</th><th class="right">現價</th><th class="right">成本價</th><th class="right">持有股數</th><th class="right">市值</th><th class="right">佔比 (依顯示)</th><th class="right">個別報酬率</th>
         </tr>
         {% for it in us_table %}
         <tr>
-            <td>{{ it.symbol }}</td>
-            <td class="right">{{ it.price_str }}</td>
-            <td class="right">{{ it.cost_str }}</td>
-            <td class="right">{{ it.shares_str }}</td>
-            <td class="right">{{ it.mv_str }}</td>
-            <td class="right">{{ it.weight_str }}</td>
-            <td class="right {% if it.profit_pct > 0 %}gain{% elif it.profit_pct < 0 %}loss{% endif %}">{{ it.profit_pct_str }}</td>
+            <td>{{ it.symbol }}</td><td class="right">{{ it.price_str }}</td><td class="right">{{ it.cost_str }}</td><td class="right">{{ it.shares_str }}</td><td class="right">{{ it.mv_str }}</td><td class="right">{{ it.weight_str }}</td><td class="right {% if it.profit_pct > 0 %}gain{% elif it.profit_pct < 0 %}loss{% endif %}">{{ it.profit_pct_str }}</td>
         </tr>
         {% endfor %}
     </table>
 
     <div class="summary">
-        <h3>美股總結（全部持倉）</h3>
+        <h3>美股總結 (全部持倉)</h3>
         <div class="summary-row">
-            <span>美股總市值：</span>
-            <span class="right"><b>{{ '%.2f' % us_total_market_value }}</b> USD（{{ '%.0f' % (us_total_market_value * exchange_rate) }} TWD）</span>
+            <span>總市值：</span><span class="right"><b>{{ '%.2f' % us_total_market_value }}</b> USD ({{ '%.0f' % (us_total_market_value * exchange_rate) }} TWD)</span>
         </div>
         <div class="summary-row">
-            <span>美股總成本：</span>
-            <span class="right"><b>{{ '%.2f' % us_total_cost }}</b> USD（{{ '%.0f' % (us_total_cost * exchange_rate) }} TWD）</span>
+            <span>總成本：</span><span class="right"><b>{{ '%.2f' % us_total_cost }}</b> USD ({{ '%.0f' % (us_total_cost * exchange_rate) }} TWD)</span>
         </div>
         <div class="summary-row">
-            <span>美股總報酬：</span>
+            <span>總報酬：</span>
             <span class="right {% if us_total_profit_pct > 0 %}gain{% elif us_total_profit_pct < 0 %}loss{% endif %}">
-                <b>{{ '%.2f' % us_total_profit }}</b> USD（{{ '%.0f' % (us_total_profit * exchange_rate) }} TWD，{{ '%.2f' % us_total_profit_pct }}%）
+                <b>{{ '%.2f' % us_total_profit }}</b> USD ({{ '%.0f' % (us_total_profit * exchange_rate) }} TWD, {{ '%.2f' % us_total_profit_pct }}%)
             </span>
         </div>
     </div>
 
     <div class="summary">
-        <h3>美股自選股績效（已扣除 {{ excluded_join }}）</h3>
+        <h3>美股自選股績效 (已扣除 {{ excluded_join }})</h3>
         <div class="summary-row">
-            <span>自選股總市值：</span>
-            <span class="right"><b>{{ '%.2f' % us_core_total_market_value }}</b> USD（{{ '%.0f' % (us_core_total_market_value * exchange_rate) }} TWD）</span>
+            <span>總市值：</span><span class="right"><b>{{ '%.2f' % us_core_total_market_value }}</b> USD ({{ '%.0f' % (us_core_total_market_value * exchange_rate) }} TWD)</span>
         </div>
         <div class="summary-row">
-            <span>自選股總成本：</span>
-            <span class="right"><b>{{ '%.2f' % us_core_total_cost }}</b> USD（{{ '%.0f' % (us_core_total_cost * exchange_rate) }} TWD）</span>
+            <span>總成本：</span><span class="right"><b>{{ '%.2f' % us_core_total_cost }}</b> USD ({{ '%.0f' % (us_core_total_cost * exchange_rate) }} TWD)</span>
         </div>
         <div class="summary-row">
-            <span>自選股總報酬：</span>
+            <span>總報酬：</span>
             <span class="right {% if us_core_total_profit_pct > 0 %}gain{% elif us_core_total_profit_pct < 0 %}loss{% endif %}">
-                <b>{{ '%.2f' % us_core_total_profit }}</b> USD（{{ '%.0f' % (us_core_total_profit * exchange_rate) }} TWD，{{ '%.2f' % us_core_total_profit_pct }}%）
+                <b>{{ '%.2f' % us_core_total_profit }}</b> USD ({{ '%.0f' % (us_core_total_profit * exchange_rate) }} TWD, {{ '%.2f' % us_core_total_profit_pct }}%)
             </span>
         </div>
     </div>
 
-    <h2>台股投資組合（TWD）</h2>
+    <h2>台股投資組合 (TWD)</h2>
     <table>
         <tr>
-            <th>代碼</th>
-            <th class="right">現價</th>
-            <th class="right">成本價</th>
-            <th class="right">持有股數</th>
-            <th class="right">市值</th>
-            <th class="right">佔比</th>
-            <th class="right">個別報酬率</th>
+            <th>代碼</th><th class="right">現價</th><th class="right">成本價</th><th class="right">持有股數</th><th class="right">市值</th><th class="right">佔比</th><th class="right">個別報酬率</th>
         </tr>
         {% for it in tw_table %}
         <tr>
-            <td>{{ it.symbol }}</td>
-            <td class="right">{{ it.price_str }}</td>
-            <td class="right">{{ it.cost_str }}</td>
-            <td class="right">{{ it.shares_str }}</td>
-            <td class="right">{{ it.mv_str }}</td>
-            <td class="right">{{ it.weight_str }}</td>
-            <td class="right {% if it.profit_pct > 0 %}gain{% elif it.profit_pct < 0 %}loss{% endif %}">{{ it.profit_pct_str }}</td>
+            <td>{{ it.symbol }}</td><td class="right">{{ it.price_str }}</td><td class="right">{{ it.cost_str }}</td><td class="right">{{ it.shares_str }}</td><td class="right">{{ it.mv_str }}</td><td class="right">{{ it.weight_str }}</td><td class="right {% if it.profit_pct > 0 %}gain{% elif it.profit_pct < 0 %}loss{% endif %}">{{ it.profit_pct_str }}</td>
         </tr>
         {% endfor %}
     </table>
-
     <div class="summary">
         <div class="summary-row">
-            <span>台股總市值：</span>
-            <span class="right"><b>{{ '%.0f' % tw_total_market_value }}</b> TWD</span>
+            <span>台股總市值：</span><span class="right"><b>{{ '%.0f' % tw_total_market_value }}</b> TWD</span>
         </div>
         <div class="summary-row">
-            <span>台股總成本：</span>
-            <span class="right"><b>{{ '%.0f' % tw_total_cost }}</b> TWD</span>
+            <span>台股總成本：</span><span class="right"><b>{{ '%.0f' % tw_total_cost }}</b> TWD</span>
         </div>
         <div class="summary-row">
             <span>台股總報酬：</span>
             <span class="right {% if tw_total_profit_pct > 0 %}gain{% elif tw_total_profit_pct < 0 %}loss{% endif %}">
-                <b>{{ '%.0f' % tw_total_profit }}</b> TWD（{{ '%.2f' % tw_total_profit_pct }}%）
+                <b>{{ '%.0f' % tw_total_profit }}</b> TWD ({{ '%.2f' % tw_total_profit_pct }}%)
             </span>
         </div>
     </div>
+
+    <h2>短債部位 (Short-term Bonds)</h2>
+    <table>
+        <tr>
+            <th>代碼</th><th class="right">現價 (USD)</th><th class="right">成本價 (USD)</th><th class="right">持有數量</th><th class="right">市值 (USD)</th><th class="right">個別報酬率</th>
+        </tr>
+        {% for it in short_term_bonds_table %}
+        <tr>
+            <td>{{ it.symbol }}</td><td class="right">{{ it.price_str }}</td><td class="right">{{ it.cost_str }}</td><td class="right">{{ it.shares_str }}</td><td class="right">{{ it.mv_str }}</td><td class="right {% if it.profit_pct > 0 %}gain{% elif it.profit_pct < 0 %}loss{% endif %}">{{ it.profit_pct_str }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    <div class="summary">
+        <div class="summary-row">
+            <span>短債總市值：</span><span class="right"><b>{{ '%.2f' % short_term_bonds_total_market_value_usd }}</b> USD ({{ '%.0f' % (short_term_bonds_total_market_value_usd * exchange_rate) }} TWD)</span>
+        </div>
+        <div class="summary-row">
+            <span>短債總成本：</span><span class="right"><b>{{ '%.2f' % short_term_bonds_total_cost_usd }}</b> USD ({{ '%.0f' % (short_term_bonds_total_cost_usd * exchange_rate) }} TWD)</span>
+        </div>
+        <div class="summary-row">
+            <span>短債總報酬：</span>
+            <span class="right {% if short_term_bonds_total_profit_pct > 0 %}gain{% elif short_term_bonds_total_profit_pct < 0 %}loss{% endif %}">
+                <b>{{ '%.2f' % short_term_bonds_total_profit_usd }}</b> USD ({{ '%.0f' % (short_term_bonds_total_profit_usd * exchange_rate) }} TWD, {{ '%.2f' % short_term_bonds_total_profit_pct }}%)
+            </span>
+        </div>
+    </div>
+
+    <h2>長債部位 (Long-term Bonds)</h2>
+    <table>
+        <tr>
+            <th>代碼</th><th class="right">現價 (USD)</th><th class="right">成本價 (USD)</th><th class="right">持有數量</th><th class="right">市值 (USD)</th><th class="right">個別報酬率</th>
+        </tr>
+        {% for it in long_term_bonds_table %}
+        <tr>
+            <td>{{ it.symbol }}</td><td class="right">{{ it.price_str }}</td><td class="right">{{ it.cost_str }}</td><td class="right">{{ it.shares_str }}</td><td class="right">{{ it.mv_str }}</td><td class="right {% if it.profit_pct > 0 %}gain{% elif it.profit_pct < 0 %}loss{% endif %}">{{ it.profit_pct_str }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    <div class="summary">
+        <div class="summary-row">
+            <span>長債總市值：</span><span class="right"><b>{{ '%.2f' % long_term_bonds_total_market_value_usd }}</b> USD ({{ '%.0f' % (long_term_bonds_total_market_value_usd * exchange_rate) }} TWD)</span>
+        </div>
+        <div class="summary-row">
+            <span>長債總成本：</span><span class="right"><b>{{ '%.2f' % long_term_bonds_total_cost_usd }}</b> USD ({{ '%.0f' % (long_term_bonds_total_cost_usd * exchange_rate) }} TWD)</span>
+        </div>
+        <div class="summary-row">
+            <span>長債總報酬：</span>
+            <span class="right {% if long_term_bonds_total_profit_pct > 0 %}gain{% elif long_term_bonds_total_profit_pct < 0 %}loss{% endif %}">
+                <b>{{ '%.2f' % long_term_bonds_total_profit_usd }}</b> USD ({{ '%.0f' % (long_term_bonds_total_profit_usd * exchange_rate) }} TWD, {{ '%.2f' % long_term_bonds_total_profit_pct }}%)
+            </span>
+        </div>
+    </div>
+
+    <h2>現金部位 (Cash)</h2>
+    <table>
+        <tr>
+            <th>幣別</th><th class="right">金額</th><th class="right">市值 (TWD)</th>
+        </tr>
+        {% for it in cash_table %}
+        <tr>
+            <td>{{ it.currency }}</td><td class="right">{{ it.amount_str }}</td><td class="right">{{ it.mv_twd_str }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    <div class="summary">
+        <div class="summary-row">
+            <span>現金總部位 (TWD)：</span><span class="right"><b>{{ '%.0f' % cash_total_value_twd }}</b> TWD</span>
+        </div>
+    </div>
+
+    <h2>加密貨幣 (Crypto)</h2>
+    <table>
+        <tr>
+            <th>代碼</th><th class="right">現價 (USD)</th><th class="right">成本價 (USD)</th><th class="right">持有數量</th><th class="right">市值 (USD)</th><th class="right">個別報酬率</th>
+        </tr>
+        {% for it in crypto_table %}
+        <tr>
+            <td>{{ it.symbol }}</td><td class="right">{{ it.price_str }}</td><td class="right">{{ it.cost_str }}</td><td class="right">{{ it.amount_str }}</td><td class="right">{{ it.mv_str }}</td><td class="right {% if it.profit_pct > 0 %}gain{% elif it.profit_pct < 0 %}loss{% endif %}">{{ it.profit_pct_str }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    <div class="summary">
+        <div class="summary-row">
+            <span>加密貨幣總市值：</span><span class="right"><b>{{ '%.2f' % crypto_total_market_value_usd }}</b> USD ({{ '%.0f' % (crypto_total_market_value_usd * exchange_rate) }} TWD)</span>
+        </div>
+        <div class="summary-row">
+            <span>加密貨幣總成本：</span><span class="right"><b>{{ '%.2f' % crypto_total_cost_usd }}</b> USD ({{ '%.0f' % (crypto_total_cost_usd * exchange_rate) }} TWD)</span>
+        </div>
+        <div class="summary-row">
+            <span>加密貨幣總報酬：</span>
+            <span class="right {% if crypto_total_profit_pct > 0 %}gain{% elif crypto_total_profit_pct < 0 %}loss{% endif %}">
+                <b>{{ '%.2f' % crypto_total_profit_usd }}</b> USD ({{ '%.0f' % (crypto_total_profit_usd * exchange_rate) }} TWD, {{ '%.2f' % crypto_total_profit_pct }}%)
+            </span>
+        </div>
+    </div>
+
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    Chart.register(ChartDataLabels);
+    const ctx = document.getElementById('assetAllocationChart').getContext('2d');
+    const data = {
+        labels: ['股票', '現金', '加密貨幣', '短債', '長債'],
+        datasets: [{
+            label: '資產分佈 (TWD)',
+            data: [
+                {{ total_stock_value_twd or 0 }},
+                {{ cash_total_value_twd or 0 }},
+                {{ total_crypto_value_twd or 0 }},
+                {{ short_term_bonds_total_value_twd or 0 }},
+                {{ long_term_bonds_total_value_twd or 0 }}
+            ],
+            backgroundColor: [
+                'rgba(75, 192, 192, 0.7)',
+                'rgba(54, 162, 235, 0.7)',
+                'rgba(255, 206, 86, 0.7)',
+                'rgba(153, 102, 255, 0.7)',
+                'rgba(255, 159, 64, 0.7)'
+            ],
+            borderColor: '#fff',
+            borderWidth: 2
+        }]
+    };
+    const config = {
+        type: 'pie',
+        data: data,
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                title: {
+                    display: true,
+                    text: '資產分佈 (TWD)',
+                    font: { size: 18 }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.label || '';
+                            if (label) { label += ': '; }
+                            if (context.parsed !== null) {
+                                const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                const percentage = ((context.parsed / total) * 100).toFixed(2);
+                                label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(context.parsed) + ` (${percentage}%)`;
+                            }
+                            return label;
+                        }
+                    }
+                },
+                datalabels: {
+                    formatter: (value, ctx) => {
+                        const total = ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                        if (total === 0) return '0%';
+                        const percentage = value / total * 100;
+                        return percentage > 2 ? percentage.toFixed(1) + '%' : '';
+                    },
+                    color: '#fff',
+                    font: {
+                        weight: 'bold',
+                        size: 14,
+                    },
+                    textStrokeColor: '#333',
+                    textStrokeWidth: 2
+                }
+            }
+        },
+    };
+    new Chart(ctx, config);
+});
+</script>
 </body>
 </html>
 """
 
+# ============== Helper Function ==============
+def process_usd_asset_portfolio(portfolio, price_fetcher, amount_key='shares'):
+    """通用函式，處理以美元計價的資產組合"""
+    items = []
+    for row in portfolio:
+        price = price_fetcher(row['symbol'])
+        cost_total = row['cost'] * row[amount_key]
+        if price == 'N/A' or cost_total == 0:
+            mv, profit_pct = 0.0, 0.0
+        else:
+            mv = price * row[amount_key]
+            profit_pct = (mv - cost_total) / cost_total * 100
+        items.append({"symbol": row['symbol'], "price": price, amount_key: row[amount_key],"cost": row['cost'], "market_value": mv, "profit_pct": profit_pct})
+    
+    total_market_value = sum(it["market_value"] for it in items)
+    total_cost = sum(r['cost'] * r[amount_key] for r in portfolio)
+    total_profit = total_market_value - total_cost
+    total_profit_pct = (total_profit / total_cost * 100) if total_cost else 0.0
+    
+    table_items = []
+    for it in items:
+        table_items.append({
+            **it,
+            "price_str": f"{it['price']:,.2f}" if it['price'] != 'N/A' else 'N/A',
+            "cost_str": f"{it['cost']:,.2f}",
+            f"{amount_key}_str": f"{it[amount_key]:,.4f}".rstrip('0').rstrip('.'),
+            "mv_str": f"{it['market_value']:,.2f}",
+            "profit_pct_str": f"{it['profit_pct']:.2f}%" if it['price'] != 'N/A' else 'N/A',
+        })
+    table_items.sort(key=lambda x: x["market_value"], reverse=True)
+
+    # 為了讓模板的 key 一致，統一命名為 'shares_str' 或 'amount_str' 供 HTML 使用
+    if amount_key == 'amount':
+        for item in table_items:
+            item['amount_str'] = item[f'{amount_key}_str']
+    else: # 預設為 shares
+        for item in table_items:
+            item['shares_str'] = item[f'{amount_key}_str']
+
+
+    return {
+        "table": table_items,
+        "total_market_value_usd": total_market_value,
+        "total_cost_usd": total_cost,
+        "total_profit_usd": total_profit,
+        "total_profit_pct": total_profit_pct
+    }
+
+
 # ============== 路由 ==============
 @app.route("/")
 def home():
-    updated_at_tw = datetime.now(timezone('Asia/Taipei')).strftime("%Y-%m-%d %H:%M")
-    exchange_rate = get_usdtwd_rate(default=31.5)
+    updated_at_tw = datetime.now(timezone('Asia/Taipei')).strftime("%Y-%m-%d %H:%M:%S")
+    exchange_rate = get_currency_rate('USDTWD', default=32.5)
 
     # ---- 美股資料
-    us_items = []
-    us_total_market_value = 0.0
-    for row in US_PORTFOLIO:
-        price = cached_close(row['symbol'], ttl=_TTL_FAST)
-        if price == 'N/A':
-            mv = 0.0
-            profit = 0.0
-            profit_pct = 0.0
-            price_str = 'N/A'
-            mv_str = 'N/A'
-            profit_pct_str = 'N/A'
-        else:
-            mv = price * row['shares']
-            profit = mv - row['cost'] * row['shares']
-            profit_pct = (profit / (row['cost'] * row['shares']) * 100) if row['cost'] * row['shares'] else 0.0
-            price_str = f"{price:.2f}"
-            mv_str = f"{mv:.2f}"
-            profit_pct_str = f"{profit_pct:.2f}%"
-        us_total_market_value += mv
-        us_items.append({
-            "symbol": row['symbol'],
-            "price": price,
-            "price_str": price_str,
-            "shares": row['shares'],
-            "shares_str": f"{row['shares']:.2f}",
-            "cost": row['cost'],
-            "cost_str": f"{row['cost']:.2f}",
-            "market_value": mv,
-            "mv_str": mv_str,
-            "profit": profit,
-            "profit_pct": profit_pct,
-            "profit_pct_str": profit_pct_str,
-        })
-
-    us_total_cost = sum(r['cost'] * r['shares'] for r in US_PORTFOLIO)
-    us_total_profit = sum(it["profit"] for it in us_items)
-    us_total_profit_pct = (us_total_profit / us_total_cost * 100) if us_total_cost else 0.0
+    us_data = process_usd_asset_portfolio(US_PORTFOLIO, cached_close)
+    us_total_market_value = us_data['total_market_value_usd']
+    us_total_cost = us_data['total_cost_usd']
+    us_total_profit = us_data['total_profit_usd']
+    us_total_profit_pct = us_data['total_profit_pct']
 
     # ===== 美股「自選股」摘要（排除 ETF）=====
-    us_core_items = [it for it in us_items if it["symbol"] not in EXCLUDED_ETFS_US]
+    us_core_items = [it for it in us_data['table'] if it["symbol"] not in EXCLUDED_ETFS_US]
     us_core_total_market_value = sum(it["market_value"] for it in us_core_items)
-    us_core_total_cost = sum((it["cost"] * it["shares"]) for it in us_core_items)
-    us_core_total_profit = sum(it["profit"] for it in us_core_items)
+    us_core_total_cost = sum(r['cost'] * r['shares'] for r in US_PORTFOLIO if r['symbol'] not in EXCLUDED_ETFS_US)
+    us_core_total_profit = us_core_total_market_value - us_core_total_cost
     us_core_total_profit_pct = (us_core_total_profit / us_core_total_cost * 100) if us_core_total_cost else 0.0
 
     # 切換：隱藏 ETF（影響表格與佔比分母）
     hide_etf = request.args.get('hide_etf') in ('1', 'true', 'on', 'yes')
-    us_table = us_core_items if hide_etf else us_items
-    us_denominator = sum(it["market_value"] for it in us_table) if hide_etf else us_total_market_value
-    for it in us_table:
-        it["weight_str"] = (f"{(it['market_value'] / us_denominator * 100):.2f}%"
-                            if it['market_value'] and us_denominator else "N/A")
+    us_table_src = us_core_items if hide_etf else us_data['table']
+    us_denominator = sum(it["market_value"] for it in us_table_src) or 1
+    for it in us_table_src:
+        it["weight_str"] = f"{(it['market_value'] / us_denominator * 100):.2f}%"
+    us_table = us_table_src
 
     # ---- 台股資料
     tw_items = []
-    tw_total_market_value = 0.0
     for row in TW_PORTFOLIO:
         price = get_tw_stock_price(row['symbol'])
-        if price == 'N/A':
-            mv = 0.0
-            profit = 0.0
-            profit_pct = 0.0
-            price_str = 'N/A'
-            mv_str = 'N/A'
-            profit_pct_str = 'N/A'
-        else:
-            mv = price * row['shares']
-            profit = mv - row['cost'] * row['shares']
-            profit_pct = (profit / (row['cost'] * row['shares']) * 100) if row['cost'] * row['shares'] else 0.0
-            price_str = f"{price:.2f}"
-            mv_str = f"{mv:.2f}"
-            profit_pct_str = f"{profit_pct:.2f}%"
-        tw_total_market_value += mv
-        tw_items.append({
-            "symbol": row['symbol'],
-            "price": price,
-            "price_str": price_str,
-            "shares": row['shares'],
-            "shares_str": f"{row['shares']:.2f}",
-            "cost": row['cost'],
-            "cost_str": f"{row['cost']:.2f}",
-            "market_value": mv,
-            "mv_str": mv_str,
-            "profit": profit,
-            "profit_pct": profit_pct,
-            "profit_pct_str": profit_pct_str,
-        })
+        cost_total = row['cost'] * row['shares']
+        if price == 'N/A' or cost_total == 0: mv, profit_pct = 0.0, 0.0
+        else: mv, profit_pct = price * row['shares'], ((price * row['shares']) - cost_total) / cost_total * 100
+        tw_items.append({"symbol": row['symbol'], "price": price, "shares": row['shares'], "cost": row['cost'], "market_value": mv, "profit_pct": profit_pct})
+    tw_total_market_value = sum(it["market_value"] for it in tw_items)
     tw_total_cost = sum(r['cost'] * r['shares'] for r in TW_PORTFOLIO)
-    tw_total_profit = sum(it["profit"] for it in tw_items)
+    tw_total_profit = tw_total_market_value - tw_total_cost
     tw_total_profit_pct = (tw_total_profit / tw_total_cost * 100) if tw_total_cost else 0.0
+    tw_denominator = tw_total_market_value or 1
+    tw_table = []
     for it in tw_items:
-        it["weight_str"] = (f"{(it['market_value'] / tw_total_market_value * 100):.2f}%"
-                            if it['market_value'] and tw_total_market_value else "N/A")
+        tw_table.append({**it, "price_str": f"{it['price']:.2f}" if it['price']!='N/A' else 'N/A', "cost_str": f"{it['cost']:.2f}", "shares_str": f"{it['shares']:,}".rstrip('0').rstrip('.'), "mv_str": f"{it['market_value']:,.0f}", "profit_pct_str": f"{it['profit_pct']:.2f}%" if it['price']!='N/A' else 'N/A', "weight_str": f"{(it['market_value']/tw_denominator*100):.2f}%"})
+    tw_table.sort(key=lambda x: x["market_value"], reverse=True)
 
+    # ---- 債券 & 加密貨幣 & 現金
+    short_term_bonds_data = process_usd_asset_portfolio(SHORT_TERM_BONDS, cached_close)
+    long_term_bonds_data = process_usd_asset_portfolio(LONG_TERM_BONDS, cached_close)
+    crypto_data = process_usd_asset_portfolio(CRYPTO_PORTFOLIO, get_crypto_price, amount_key='amount')
+    
+    cash_table = []
+    cash_total_value_twd = 0.0
+    for row in CASH_HOLDINGS:
+        rate = 1.0 if row['currency'] == 'TWD' else get_currency_rate(f"{row['currency']}TWD", 1.0)
+        mv_twd = row['amount'] * rate
+        cash_total_value_twd += mv_twd
+        cash_table.append({"currency": row['currency'], "amount_str": f"{row['amount']:,.2f}", "mv_twd_str": f"{mv_twd:,.0f}"})
+    
     # ---- 總覽（折台幣）
-    total_market_value_twd = (us_total_market_value * exchange_rate) + tw_total_market_value
-    total_cost_twd = (us_total_cost * exchange_rate) + tw_total_cost
-    total_profit_twd = (us_total_profit * exchange_rate) + tw_total_profit
-    total_profit_pct = (total_profit_twd / total_cost_twd * 100) if total_cost_twd else 0.0
+    total_stock_value_twd = (us_total_market_value * exchange_rate) + tw_total_market_value
+    short_term_bonds_total_value_twd = short_term_bonds_data['total_market_value_usd'] * exchange_rate
+    long_term_bonds_total_value_twd = long_term_bonds_data['total_market_value_usd'] * exchange_rate
+    total_crypto_value_twd = crypto_data['total_market_value_usd'] * exchange_rate
+    
+    grand_total_market_value_twd = total_stock_value_twd + cash_total_value_twd + total_crypto_value_twd + short_term_bonds_total_value_twd + long_term_bonds_total_value_twd
+    
+    grand_total_cost_twd = (us_total_cost * exchange_rate) + tw_total_cost + (short_term_bonds_data['total_cost_usd'] * exchange_rate) + (long_term_bonds_data['total_cost_usd'] * exchange_rate) + cash_total_value_twd + (crypto_data['total_cost_usd'] * exchange_rate)
+    
+    grand_total_profit_twd = grand_total_market_value_twd - grand_total_cost_twd
+    grand_total_profit_pct = (grand_total_profit_twd / grand_total_cost_twd * 100) if grand_total_cost_twd else 0.0
+    
+    # ---- 組合樣板參數 ----
+    template_args = {
+        'updated_at': updated_at_tw, 'exchange_rate': exchange_rate, 'hide_etf': hide_etf, 'excluded_join': "、".join(sorted(EXCLUDED_ETFS_US)),
+        'us_table': us_table, 'us_total_market_value': us_total_market_value, 'us_total_cost': us_total_cost, 'us_total_profit': us_total_profit, 'us_total_profit_pct': us_total_profit_pct,
+        'us_core_total_market_value': us_core_total_market_value, 'us_core_total_cost': us_core_total_cost, 'us_core_total_profit': us_core_total_profit, 'us_core_total_profit_pct': us_core_total_profit_pct,
+        'tw_table': tw_table, 'tw_total_market_value': tw_total_market_value, 'tw_total_cost': tw_total_cost, 'tw_total_profit': tw_total_profit, 'tw_total_profit_pct': tw_total_profit_pct,
+        'cash_table': cash_table, 'cash_total_value_twd': cash_total_value_twd,
+        'total_stock_value_twd': total_stock_value_twd, 'total_crypto_value_twd': total_crypto_value_twd, 'short_term_bonds_total_value_twd': short_term_bonds_total_value_twd, 'long_term_bonds_total_value_twd': long_term_bonds_total_value_twd,
+        'grand_total_market_value_twd': grand_total_market_value_twd, 'grand_total_cost_twd': grand_total_cost_twd, 'grand_total_profit_twd': grand_total_profit_twd, 'grand_total_profit_pct': grand_total_profit_pct,
+    }
 
-    # 排序（市值大到小）
-    us_table.sort(key=lambda x: x["market_value"], reverse=True)
-    tw_items.sort(key=lambda x: x["market_value"], reverse=True)
+    # 使用清晰的前綴來合併字典
+    for prefix, data_dict in [('short_term_bonds', short_term_bonds_data), ('long_term_bonds', long_term_bonds_data), ('crypto', crypto_data)]:
+        for key, value in data_dict.items():
+            # 將 'table' -> 'short_term_bonds_table', 'total_cost_usd' -> 'short_term_bonds_total_cost_usd'
+            template_args[f'{prefix}_{key}'] = value
 
-    return render_template_string(
-        TEMPLATE,
-        updated_at=updated_at_tw,
-        exchange_rate=exchange_rate,
-        hide_etf=hide_etf,
-        excluded_join="、".join(sorted(EXCLUDED_ETFS_US)),
+    return render_template_string(TEMPLATE, **template_args)
 
-        us_table=us_table,
-        us_total_market_value=us_total_market_value,
-        us_total_cost=us_total_cost,
-        us_total_profit=us_total_profit,
-        us_total_profit_pct=us_total_profit_pct,
-
-        # 自選股摘要
-        us_core_total_market_value=us_core_total_market_value,
-        us_core_total_cost=us_core_total_cost,
-        us_core_total_profit=us_core_total_profit,
-        us_core_total_profit_pct=us_core_total_profit_pct,
-
-        tw_table=tw_items,
-        tw_total_market_value=tw_total_market_value,
-        tw_total_cost=tw_total_cost,
-        tw_total_profit=tw_total_profit,
-        tw_total_profit_pct=tw_total_profit_pct,
-
-        total_market_value_twd=total_market_value_twd,
-        total_cost_twd=total_cost_twd,
-        total_profit_twd=total_profit_twd,
-        total_profit_pct=total_profit_pct,
-    )
 
 @app.get("/health")
 def health():
@@ -457,4 +632,5 @@ def health():
 # 本機執行（Render 用 gunicorn，不會跑到這裡）
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=port, debug=True)
+
