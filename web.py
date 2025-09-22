@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 """
 本機：
@@ -27,14 +26,13 @@ logging.getLogger("yfinance").setLevel(logging.ERROR)
 
 # ============== 使用者設定 ==============
 # 在「自選股績效」中要排除的美股 ETF（用於 hide_etf 與摘要）
-# SGOV, BOXX, TLT 已移至債券部位，故從此處移除
-EXCLUDED_ETFS_US = {'VOO', 'VEA', 'GLD', 'VT', 'EWT', 'XLU'}
+# SGOV, BOXX, TLT, GLD 已移至其專屬部位，故從此處移除
+EXCLUDED_ETFS_US = {'VOO', 'VEA', 'VT', 'EWT', 'XLU'}
 
 # 你的持倉（可自行調整）
 US_PORTFOLIO = [
     {'symbol': 'VOO',   'shares': 70.00, 'cost': 506.75},
     {'symbol': 'VEA',   'shares': 86.80, 'cost': 53.55},
-    {'symbol': 'GLD',   'shares': 16.55, 'cost': 300.10},
     {'symbol': 'UNH',   'shares': 22,    'cost': 310.86},
     {'symbol': 'GOOGL', 'shares': 72,    'cost': 174.71},
     {'symbol': 'NVDA',  'shares': 32,    'cost': 120.92},
@@ -64,6 +62,11 @@ TW_PORTFOLIO = [
     {'symbol': '0050.TW',   'shares': 10637, 'cost': 41.58},
     {'symbol': '006208.TW', 'shares': 9000,  'cost': 112.67},
     {'symbol': '00713.TW',  'shares': 10427, 'cost': 54.40},
+]
+
+# 黃金部位
+GOLD_PORTFOLIO = [
+    {'symbol': 'GLD',   'shares': 16.55, 'cost': 300.10},
 ]
 
 # 短債部位
@@ -174,7 +177,7 @@ TEMPLATE = r"""
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Chink's Portfolio</title>
+    <title>Ching's Portfolio</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
     <style>
@@ -202,10 +205,9 @@ TEMPLATE = r"""
 <div class="container">
     <div class="nav">
         <a href="/">投資組合</a>
-        <a href="/health">健康檢查</a>
     </div>
 
-    <h1>Chink's Portfolio</h1>
+    <h1>Ching's Portfolio</h1>
     <div class="meta">更新時間：{{ updated_at }}</div>
     <div class="meta">美金兌台幣匯率：<b>{{ '%.3f' % exchange_rate }}</b></div>
 
@@ -305,6 +307,32 @@ TEMPLATE = r"""
             <span>台股總報酬：</span>
             <span class="right {% if tw_total_profit_pct > 0 %}gain{% elif tw_total_profit_pct < 0 %}loss{% endif %}">
                 <b>{{ '%.0f' % tw_total_profit }}</b> TWD ({{ '%.2f' % tw_total_profit_pct }}%)
+            </span>
+        </div>
+    </div>
+
+    <h2>黃金部位 (Gold)</h2>
+    <table>
+        <tr>
+            <th>代碼</th><th class="right">現價 (USD)</th><th class="right">成本價 (USD)</th><th class="right">持有盎司/股數</th><th class="right">市值 (USD)</th><th class="right">個別報酬率</th>
+        </tr>
+        {% for it in gold_table %}
+        <tr>
+            <td>{{ it.symbol }}</td><td class="right">{{ it.price_str }}</td><td class="right">{{ it.cost_str }}</td><td class="right">{{ it.shares_str }}</td><td class="right">{{ it.mv_str }}</td><td class="right {% if it.profit_pct > 0 %}gain{% elif it.profit_pct < 0 %}loss{% endif %}">{{ it.profit_pct_str }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    <div class="summary">
+        <div class="summary-row">
+            <span>黃金總市值：</span><span class="right"><b>{{ '%.2f' % gold_total_market_value_usd }}</b> USD ({{ '%.0f' % (gold_total_market_value_usd * exchange_rate) }} TWD)</span>
+        </div>
+        <div class="summary-row">
+            <span>黃金總成本：</span><span class="right"><b>{{ '%.2f' % gold_total_cost_usd }}</b> USD ({{ '%.0f' % (gold_total_cost_usd * exchange_rate) }} TWD)</span>
+        </div>
+        <div class="summary-row">
+            <span>黃金總報酬：</span>
+            <span class="right {% if gold_total_profit_pct > 0 %}gain{% elif gold_total_profit_pct < 0 %}loss{% endif %}">
+                <b>{{ '%.2f' % gold_total_profit_usd }}</b> USD ({{ '%.0f' % (gold_total_profit_usd * exchange_rate) }} TWD, {{ '%.2f' % gold_total_profit_pct }}%)
             </span>
         </div>
     </div>
@@ -410,13 +438,14 @@ document.addEventListener('DOMContentLoaded', function () {
     Chart.register(ChartDataLabels);
     const ctx = document.getElementById('assetAllocationChart').getContext('2d');
     const data = {
-        labels: ['股票', '現金', '加密貨幣', '短債', '長債'],
+        labels: ['股票', '現金', '加密貨幣', '黃金', '短債', '長債'],
         datasets: [{
             label: '資產分佈 (TWD)',
             data: [
                 {{ total_stock_value_twd or 0 }},
                 {{ cash_total_value_twd or 0 }},
                 {{ total_crypto_value_twd or 0 }},
+                {{ gold_total_value_twd or 0 }},
                 {{ short_term_bonds_total_value_twd or 0 }},
                 {{ long_term_bonds_total_value_twd or 0 }}
             ],
@@ -424,6 +453,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 'rgba(75, 192, 192, 0.7)',
                 'rgba(54, 162, 235, 0.7)',
                 'rgba(255, 206, 86, 0.7)',
+                'rgba(255, 99, 132, 0.7)',
                 'rgba(153, 102, 255, 0.7)',
                 'rgba(255, 159, 64, 0.7)'
             ],
@@ -579,10 +609,11 @@ def home():
         tw_table.append({**it, "price_str": f"{it['price']:.2f}" if it['price']!='N/A' else 'N/A', "cost_str": f"{it['cost']:.2f}", "shares_str": f"{it['shares']:,}".rstrip('0').rstrip('.'), "mv_str": f"{it['market_value']:,.0f}", "profit_pct_str": f"{it['profit_pct']:.2f}%" if it['price']!='N/A' else 'N/A', "weight_str": f"{(it['market_value']/tw_denominator*100):.2f}%"})
     tw_table.sort(key=lambda x: x["market_value"], reverse=True)
 
-    # ---- 債券 & 加密貨幣 & 現金
+    # ---- 債券 & 加密貨幣 & 現金 & 黃金
     short_term_bonds_data = process_usd_asset_portfolio(SHORT_TERM_BONDS, cached_close)
     long_term_bonds_data = process_usd_asset_portfolio(LONG_TERM_BONDS, cached_close)
     crypto_data = process_usd_asset_portfolio(CRYPTO_PORTFOLIO, get_crypto_price, amount_key='amount')
+    gold_data = process_usd_asset_portfolio(GOLD_PORTFOLIO, cached_close)
     
     cash_table = []
     cash_total_value_twd = 0.0
@@ -597,10 +628,11 @@ def home():
     short_term_bonds_total_value_twd = short_term_bonds_data['total_market_value_usd'] * exchange_rate
     long_term_bonds_total_value_twd = long_term_bonds_data['total_market_value_usd'] * exchange_rate
     total_crypto_value_twd = crypto_data['total_market_value_usd'] * exchange_rate
+    gold_total_value_twd = gold_data['total_market_value_usd'] * exchange_rate
     
-    grand_total_market_value_twd = total_stock_value_twd + cash_total_value_twd + total_crypto_value_twd + short_term_bonds_total_value_twd + long_term_bonds_total_value_twd
+    grand_total_market_value_twd = total_stock_value_twd + cash_total_value_twd + total_crypto_value_twd + short_term_bonds_total_value_twd + long_term_bonds_total_value_twd + gold_total_value_twd
     
-    grand_total_cost_twd = (us_total_cost * exchange_rate) + tw_total_cost + (short_term_bonds_data['total_cost_usd'] * exchange_rate) + (long_term_bonds_data['total_cost_usd'] * exchange_rate) + cash_total_value_twd + (crypto_data['total_cost_usd'] * exchange_rate)
+    grand_total_cost_twd = (us_total_cost * exchange_rate) + tw_total_cost + (short_term_bonds_data['total_cost_usd'] * exchange_rate) + (long_term_bonds_data['total_cost_usd'] * exchange_rate) + cash_total_value_twd + (crypto_data['total_cost_usd'] * exchange_rate) + (gold_data['total_cost_usd'] * exchange_rate)
     
     grand_total_profit_twd = grand_total_market_value_twd - grand_total_cost_twd
     grand_total_profit_pct = (grand_total_profit_twd / grand_total_cost_twd * 100) if grand_total_cost_twd else 0.0
@@ -612,14 +644,17 @@ def home():
         'us_core_total_market_value': us_core_total_market_value, 'us_core_total_cost': us_core_total_cost, 'us_core_total_profit': us_core_total_profit, 'us_core_total_profit_pct': us_core_total_profit_pct,
         'tw_table': tw_table, 'tw_total_market_value': tw_total_market_value, 'tw_total_cost': tw_total_cost, 'tw_total_profit': tw_total_profit, 'tw_total_profit_pct': tw_total_profit_pct,
         'cash_table': cash_table, 'cash_total_value_twd': cash_total_value_twd,
-        'total_stock_value_twd': total_stock_value_twd, 'total_crypto_value_twd': total_crypto_value_twd, 'short_term_bonds_total_value_twd': short_term_bonds_total_value_twd, 'long_term_bonds_total_value_twd': long_term_bonds_total_value_twd,
+        'total_stock_value_twd': total_stock_value_twd, 
+        'total_crypto_value_twd': total_crypto_value_twd, 
+        'short_term_bonds_total_value_twd': short_term_bonds_total_value_twd, 
+        'long_term_bonds_total_value_twd': long_term_bonds_total_value_twd,
+        'gold_total_value_twd': gold_total_value_twd,
         'grand_total_market_value_twd': grand_total_market_value_twd, 'grand_total_cost_twd': grand_total_cost_twd, 'grand_total_profit_twd': grand_total_profit_twd, 'grand_total_profit_pct': grand_total_profit_pct,
     }
 
     # 使用清晰的前綴來合併字典
-    for prefix, data_dict in [('short_term_bonds', short_term_bonds_data), ('long_term_bonds', long_term_bonds_data), ('crypto', crypto_data)]:
+    for prefix, data_dict in [('short_term_bonds', short_term_bonds_data), ('long_term_bonds', long_term_bonds_data), ('crypto', crypto_data), ('gold', gold_data)]:
         for key, value in data_dict.items():
-            # 將 'table' -> 'short_term_bonds_table', 'total_cost_usd' -> 'short_term_bonds_total_cost_usd'
             template_args[f'{prefix}_{key}'] = value
 
     return render_template_string(TEMPLATE, **template_args)
