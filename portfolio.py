@@ -46,30 +46,38 @@ FULL_PORTFOLIO = [
 
     # ===== 自選股（會顯示）=====
     {'symbol': 'UNH',   'shares': 22,    'cost': 310.86},
-    {'symbol': 'GOOGL', 'shares': 72,    'cost': 174.71},
-    {'symbol': 'NVDA',  'shares': 32,    'cost': 120.92},
+    {'symbol': 'GOOGL', 'shares': 73.80,    'cost': 176.454},
+    {'symbol': 'NVDA',  'shares': 40.1387,    'cost': 133.039},
     {'symbol': 'MSTR',  'shares': 10,    'cost': 399.34},
     {'symbol': 'QCOM',  'shares': 3,     'cost': 148.51},
     {'symbol': 'KO',    'shares': 74.47, 'cost': 68.00},
-    {'symbol': 'AEP',   'shares': 12,    'cost': 103.05},
-    {'symbol': 'DUK',   'shares': 14,    'cost': 115.43},
+    {'symbol': 'AEP',   'shares': 13,    'cost': 103.483},
+    {'symbol': 'DUK',   'shares': 15,    'cost': 115.8626},
     {'symbol': 'MCD',   'shares': 10,    'cost': 299.23},
-    {'symbol': 'CEG',   'shares': 1,     'cost': 314.69},
-    {'symbol': 'LEU',   'shares': 1,     'cost': 214.64},
+    {'symbol': 'CEG',   'shares': 5,     'cost': 330.948},
+    {'symbol': 'LEU',   'shares': 6,     'cost': 306.178},
     {'symbol': 'PYPL',  'shares': 50,    'cost': 69.265},
     {'symbol': 'TSM',   'shares': 2,     'cost': 227.80},
     {'symbol': 'SNPS',  'shares': 4,     'cost': 397.15},
     {'symbol': 'YUM',   'shares': 1,     'cost': 141.34},
+    {'symbol': 'AMZN',   'shares': 4,     'cost': 222.8075},
+    {'symbol': 'COST',   'shares': 2,     'cost': 920.255},
+    {'symbol': 'ETN',   'shares': 1,     'cost': 365.12},
+    {'symbol': 'HUBB',   'shares': 3,     'cost': 421.24},
+    {'symbol': 'META',   'shares': 2,     'cost': 740.375},
+    {'symbol': 'MU',   'shares': 8,     'cost': 168.81125},
+    {'symbol': 'VST',   'shares': 1,     'cost': 204.68},
 
     {'symbol': 'GIS',   'shares': 2,     'cost': 49.695},
-    # {'symbol': 'IDMO',   'shares': 60,     'cost': 53.48},
+    {'symbol': 'IDMO',   'shares': 60,     'cost': 53.48},
 
 
+    {'symbol': 'INTC',   'shares': 10,     'cost': 35.485},
 
     {'symbol': 'TSLA',   'shares': 1.473,     'cost': 423.885},
 
 
-    # {'symbol': 'AVDV',   'shares': 40,     'cost':87.945},
+    {'symbol': 'AVDV',   'shares': 40,     'cost':87.945},
 
 ]
 

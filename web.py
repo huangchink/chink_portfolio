@@ -27,35 +27,59 @@ logging.getLogger("yfinance").setLevel(logging.ERROR)
 # ============== 使用者設定 ==============
 # 在「自選股績效」中要排除的美股 ETF（用於 hide_etf 與摘要）
 # SGOV, BOXX, TLT, GLD 已移至其專屬部位，故從此處移除
-EXCLUDED_ETFS_US = {'VOO', 'VEA', 'VT', 'EWT', 'XLU'}
+EXCLUDED_ETFS_US = {'VOO', 'VEA', 'EWT', 'XLU','AVDV','IDMO'}
+
+# ---- 美股部位圓餅圖分類 ----
+US_GROUP_POWER   = {'AEP','DUK','LEU','CEG','HUBB','ETN','VST','XLU'}
+US_GROUP_INDEX   = {'VOO','VEA','EWT'}
+US_GROUP_DEFENSE = {'UNH','KO','MCD','COST','GIS','YUM'}
 
 # 你的持倉（可自行調整）
 US_PORTFOLIO = [
+    # ETF（會被排除）
+    # {'symbol': 'SGOV',  'shares': 1100,  'cost': 100.40},
     {'symbol': 'VOO',   'shares': 70.00, 'cost': 506.75},
     {'symbol': 'VEA',   'shares': 86.80, 'cost': 53.55},
-    {'symbol': 'UNH',   'shares': 22,    'cost': 310.86},
-    {'symbol': 'GOOGL', 'shares': 72,    'cost': 174.71},
-    {'symbol': 'NVDA',  'shares': 32,    'cost': 120.92},
-    {'symbol': 'MSTR',  'shares': 10,    'cost': 399.34},
+    # {'symbol': 'GLD',   'shares': 16.55, 'cost': 300.10},
+    # {'symbol': 'TLT',   'shares': 224.7, 'cost': 92.22},
+    # {'symbol': 'BOXX',  'shares': 100,   'cost': 110.71},
     {'symbol': 'XLU',   'shares': 45.32, 'cost': 84.23},
+    {'symbol': 'EWT',   'shares': 100,   'cost': 61.27},
+    {'symbol': 'XLU',   'shares': 87.71, 'cost': 83.80},
+    # {'symbol': 'VT',    'shares': 50,    'cost': 133.69},
+
+    # ===== 自選股（會顯示）=====
+    {'symbol': 'UNH',   'shares': 22,    'cost': 310.86},
+    {'symbol': 'GOOGL', 'shares': 73.80,    'cost': 176.454},
+    {'symbol': 'NVDA',  'shares': 40.1387,    'cost': 133.039},
+    {'symbol': 'MSTR',  'shares': 10,    'cost': 399.34},
     {'symbol': 'QCOM',  'shares': 3,     'cost': 148.51},
     {'symbol': 'KO',    'shares': 74.47, 'cost': 68.00},
-    {'symbol': 'AEP',   'shares': 12,    'cost': 103.05},
-    {'symbol': 'DUK',   'shares': 14,    'cost': 115.43},
+    {'symbol': 'AEP',   'shares': 13,    'cost': 103.483},
+    {'symbol': 'DUK',   'shares': 15,    'cost': 115.8626},
     {'symbol': 'MCD',   'shares': 10,    'cost': 299.23},
-    {'symbol': 'CEG',   'shares': 1,     'cost': 314.69},
-    {'symbol': 'LEU',   'shares': 1,     'cost': 214.64},
-    {'symbol': 'PYPL',  'shares': 50,    'cost':  69.265},
+    {'symbol': 'CEG',   'shares': 5,     'cost': 330.948},
+    {'symbol': 'LEU',   'shares': 6,     'cost': 306.178},
+    {'symbol': 'PYPL',  'shares': 50,    'cost': 69.265},
     {'symbol': 'TSM',   'shares': 2,     'cost': 227.80},
-    {'symbol': 'EWT',   'shares': 100,   'cost': 61.27},
     {'symbol': 'SNPS',  'shares': 4,     'cost': 397.15},
     {'symbol': 'YUM',   'shares': 1,     'cost': 141.34},
-    {'symbol': 'XLU',   'shares': 87.71, 'cost': 83.80},
-    {'symbol': 'VT',    'shares': 50,    'cost': 133.69},
+    {'symbol': 'AMZN',   'shares': 4,     'cost': 222.8075},
+    {'symbol': 'COST',   'shares': 2,     'cost': 920.255},
+    {'symbol': 'ETN',   'shares': 1,     'cost': 365.12},
+    {'symbol': 'HUBB',   'shares': 3,     'cost': 421.24},
+    {'symbol': 'META',   'shares': 2,     'cost': 740.375},
+    {'symbol': 'MU',   'shares': 8,     'cost': 168.81125},
+    {'symbol': 'VST',   'shares': 1,     'cost': 204.68},
+
     {'symbol': 'GIS',   'shares': 2,     'cost': 49.695},
-    {'symbol': 'IDMO',   'shares': 60,    'cost': 53.48},
-    {'symbol': 'TSLA',   'shares': 1.473,   'cost': 423.885},
-    {'symbol': 'AVDV',   'shares': 40,    'cost':87.945},
+    {'symbol': 'IDMO',   'shares': 60,     'cost': 53.48},
+
+    {'symbol': 'INTC',   'shares': 10,     'cost': 35.485},
+
+    {'symbol': 'TSLA',   'shares': 1.473,     'cost': 423.885},
+
+    {'symbol': 'AVDV',   'shares': 40,     'cost':87.945},
 ]
 
 TW_PORTFOLIO = [
@@ -71,13 +95,15 @@ GOLD_PORTFOLIO = [
 
 # 短債部位
 SHORT_TERM_BONDS = [
-    {'symbol': 'SGOV',  'shares': 1100,  'cost': 100.40},
+    {'symbol': 'SGOV',  'shares': 1050,  'cost': 100.402495},
     {'symbol': 'BOXX',  'shares': 100,   'cost': 110.71},
 ]
 
 # 長債部位
 LONG_TERM_BONDS = [
     {'symbol': 'TLT',   'shares': 193, 'cost': 91.815},
+    {'symbol': 'IEF',   'shares': 40, 'cost': 96.665},
+
 ]
 
 # 現金部位
@@ -90,7 +116,7 @@ CASH_HOLDINGS = [
 
 # 加密貨幣投資組合
 CRYPTO_PORTFOLIO = [
-    {'symbol': 'BTC', 'amount': 0.01, 'cost': 117520},
+    {'symbol': 'BTC', 'amount': 0.0142, 'cost': 116206},
     {'symbol': 'ETH', 'amount': 0.003, 'cost': 0.000000000001},
     {'symbol': 'USDT', 'amount': 455.944, 'cost': 1.0},
     {'symbol': 'USDC', 'amount': 1630, 'cost': 1.0}
@@ -132,7 +158,7 @@ def cached_history(symbol, *, period=None, start=None, end=None, ttl=_TTL_NORMAL
 def cached_close(symbol, ttl=_TTL_FAST):
     """
     取最近一筆有效收盤價：先試 7d，再退 1mo；各自帶 TTL。
-    避免假日／停牌導致 period='1d' 為空而報「possibly delisted」。
+    避免假日／停牌導致 period='1d' 為空而報「可能下市」。
     """
     for period, t in (("7d", ttl), ("1mo", max(ttl, _TTL_NORMAL))):
         df = cached_history(symbol, period=period, ttl=t)
@@ -151,7 +177,7 @@ def get_tw_stock_price(symbol):
     candidates = [f"{base}.TW", f"{base}.TWO", base, f"{base}.TPE"]
     seen = set()
     for sym in candidates:
-        if sym in seen: 
+        if sym in seen:
             continue
         seen.add(sym)
         price = cached_close(sym, ttl=_TTL_FAST)
@@ -165,7 +191,6 @@ def get_crypto_price(symbol):
 
 def get_currency_rate(pair, default=1.0):
     """取匯率，例如 'USDTWD=X'"""
-    # yfinance 對某些貨幣對用 '=X'，有些不用，此處做一個保險
     for suffix in ['=X', '']:
         price = cached_close(f"{pair}{suffix}", ttl=_TTL_LONG)
         if price != 'N/A':
@@ -230,6 +255,11 @@ TEMPLATE = r"""
     
     <div class="chart-container">
         <canvas id="assetAllocationChart"></canvas>
+    </div>
+
+    <!-- 新增：美股部位四大類圓餅圖 -->
+    <div class="chart-container">
+        <canvas id="usGroupChart"></canvas>
     </div>
 
     <h2>美股投資組合 (USD)</h2>
@@ -508,6 +538,71 @@ document.addEventListener('DOMContentLoaded', function () {
         },
     };
     new Chart(ctx, config);
+
+    // ===== 美股部位四大類圓餅圖 =====
+    const ctxUS = document.getElementById('usGroupChart').getContext('2d');
+    const usData = {
+        labels: ['電力股', '指數投資', '防禦股', '科技股(其他)'],
+        datasets: [{
+            label: '美股部位 (USD)',
+            data: [
+                {{ power_total_usd or 0 }},
+                {{ index_total_usd or 0 }},
+                {{ defense_total_usd or 0 }},
+                {{ tech_other_total_usd or 0 }}
+            ],
+            backgroundColor: [
+                'rgba(255, 159, 64, 0.7)',   // 電力
+                'rgba(54, 162, 235, 0.7)',   // 指數
+                'rgba(75, 192, 192, 0.7)',   // 防禦
+                'rgba(153, 102, 255, 0.7)'   // 科技(其他)
+            ],
+            borderColor: '#fff',
+            borderWidth: 2
+        }]
+    };
+    const usConfig = {
+        type: 'pie',
+        data: usData,
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'top' },
+                title: {
+                    display: true,
+                    text: '美股部位：產業/性質分類 (USD)',
+                    font: { size: 18 }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.label ? context.label + ': ' : '';
+                            if (context.parsed !== null) {
+                                const total = context.chart.data.datasets[0].data.reduce((a,b)=>a+b,0);
+                                const pct = total ? (context.parsed/total*100).toFixed(2) : '0.00';
+                                label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(context.parsed);
+                                label += ` (${pct}%)`;
+                            }
+                            return label;
+                        }
+                    }
+                },
+                datalabels: {
+                    formatter: (value, ctx) => {
+                        const total = ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0);
+                        if (!total) return '0%';
+                        const pct = value / total * 100;
+                        return pct > 2 ? pct.toFixed(1) + '%' : '';
+                    },
+                    color: '#fff',
+                    font: { weight: 'bold', size: 14 },
+                    textStrokeColor: '#333',
+                    textStrokeWidth: 2
+                }
+            }
+        }
+    };
+    new Chart(ctxUS, usConfig);
 });
 </script>
 </body>
@@ -553,7 +648,6 @@ def process_usd_asset_portfolio(portfolio, price_fetcher, amount_key='shares'):
         for item in table_items:
             item['shares_str'] = item[f'{amount_key}_str']
 
-
     return {
         "table": table_items,
         "total_market_value_usd": total_market_value,
@@ -575,6 +669,23 @@ def home():
     us_total_cost = us_data['total_cost_usd']
     us_total_profit = us_data['total_profit_usd']
     us_total_profit_pct = us_data['total_profit_pct']
+
+    # ---- 美股部位四大類（以全部美股持倉計算，含 ETF；單位 USD）
+    power_total_usd = 0.0
+    index_total_usd = 0.0
+    defense_total_usd = 0.0
+    tech_other_total_usd = 0.0
+    for it in us_data['table']:  # it: {'symbol','market_value',...}
+        sym = it['symbol']
+        mv  = it['market_value']
+        if sym in US_GROUP_POWER:
+            power_total_usd += mv
+        elif sym in US_GROUP_INDEX:
+            index_total_usd += mv
+        elif sym in US_GROUP_DEFENSE:
+            defense_total_usd += mv
+        else:
+            tech_other_total_usd += mv
 
     # ===== 美股「自選股」摘要（排除 ETF）=====
     us_core_items = [it for it in us_data['table'] if it["symbol"] not in EXCLUDED_ETFS_US]
@@ -650,6 +761,12 @@ def home():
         'long_term_bonds_total_value_twd': long_term_bonds_total_value_twd,
         'gold_total_value_twd': gold_total_value_twd,
         'grand_total_market_value_twd': grand_total_market_value_twd, 'grand_total_cost_twd': grand_total_cost_twd, 'grand_total_profit_twd': grand_total_profit_twd, 'grand_total_profit_pct': grand_total_profit_pct,
+
+        # 新增：四大類（USD）
+        'power_total_usd': power_total_usd,
+        'index_total_usd': index_total_usd,
+        'defense_total_usd': defense_total_usd,
+        'tech_other_total_usd': tech_other_total_usd,
     }
 
     # 使用清晰的前綴來合併字典
@@ -668,4 +785,3 @@ def health():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
-
